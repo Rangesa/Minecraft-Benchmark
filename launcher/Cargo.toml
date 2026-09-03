@@ -1,0 +1,37 @@
+[package]
+name = "minebench-launcher"
+version = "0.1.0"
+edition = "2024"
+default-run = "minebench"
+license = "MIT"
+description = "Windows-first MineBench launcher and real Minecraft benchmark orchestrator"
+build = "build.rs"
+
+[lib]
+name = "minebench"
+path = "src/lib.rs"
+
+[[bin]]
+name = "minebench"
+path = "src/main.rs"
+
+[[bin]]
+name = "mock-benchmark"
+path = "src/bin/mock-benchmark.rs"
+
+[dependencies]
+anyhow = "1.0"
+chrono = { version = "0.4.45", features = ["clock", "serde"] }
+eframe = "0.34.1"
+hex = "0.4.3"
+rfd = "0.17.2"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.145"
+sha2 = "0.11.0"
+sha1 = "0.10.6"
+uuid = { version = "1.26.0", features = ["v4"] }
+ureq = "3.4.0"
+zip = { version = "6.0", default-features = false, features = ["deflate"] }
+
+[build-dependencies]
+embed-resource = "3.0.11"

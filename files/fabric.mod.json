@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "mcbenchmark",
+  "version": "${version}",
+  "name": "MC Benchmark",
+  "description": "Record & replay benchmark tool for Minecraft - measure FPS and entity performance",
+  "authors": ["you"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["dev.bench.BenchmarkMod"]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "fabric-api": "*",
+    "minecraft": "~1.21.1"
+  }
+}

@@ -1,0 +1,27 @@
+# Build output
+**/build/
+**/target/
+/.gradle/
+
+# Local Minecraft instances, saves, logs, and downloaded runtime data
+/run/
+*.log
+*.log.gz
+*.marker
+
+# IDE and editor state
+/.idea/
+/.vscode/
+*.iml
+
+# Temporary and local configuration
+*.tmp
+*.download
+.env
+.env.*
+
+# Java/Rust generated files
+*.class
+
+# Keep the checked release artifact in dist/ for the current public build.
+# Future release builds may replace it through scripts/build-release.ps1.
