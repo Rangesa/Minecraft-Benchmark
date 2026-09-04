@@ -1,3 +1,4 @@
+use crate::adapter::EMBEDDED_ADAPTER_FILE_NAME;
 use anyhow::{Context, Result, bail};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -10,11 +11,9 @@ pub fn embedded_size() -> usize {
 
 pub fn materialize(cache_dir: &Path) -> Result<PathBuf> {
     if EMBEDDED_ADAPTER.is_empty() {
-        bail!("the Fabric 1.21.1 Adapter is not embedded; run Gradle build before cargo release");
+        bail!("the embedded Adapter is empty; run Gradle build before cargo release");
     }
-    let destination = cache_dir
-        .join("adapters")
-        .join("mcbenchmark-fabric-1.21.1.jar");
+    let destination = cache_dir.join("adapters").join(EMBEDDED_ADAPTER_FILE_NAME);
     let parent = destination
         .parent()
         .context("embedded Adapter destination has no parent")?;

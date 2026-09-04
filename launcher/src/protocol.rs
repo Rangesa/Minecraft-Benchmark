@@ -36,6 +36,22 @@ pub struct BenchmarkConfig {
     pub chunk_samples: u32,
     #[serde(default = "default_entity_count")]
     pub entity_count: u32,
+    #[serde(default = "default_benchmark_seed")]
+    pub seed: i64,
+    #[serde(default = "default_chunk_probe_origin_x")]
+    pub chunk_probe_origin_x: i32,
+    #[serde(default = "default_chunk_probe_origin_z")]
+    pub chunk_probe_origin_z: i32,
+    #[serde(default = "default_chunk_probe_stride")]
+    pub chunk_probe_stride: u32,
+    #[serde(default = "default_render_distance")]
+    pub render_distance: u32,
+    #[serde(default = "default_simulation_distance")]
+    pub simulation_distance: u32,
+    #[serde(default = "default_max_fps")]
+    pub max_fps: u32,
+    #[serde(default = "default_enable_vsync")]
+    pub enable_vsync: bool,
 }
 
 impl Default for BenchmarkConfig {
@@ -46,6 +62,14 @@ impl Default for BenchmarkConfig {
             simulation_ticks: default_simulation_ticks(),
             chunk_samples: default_chunk_samples(),
             entity_count: default_entity_count(),
+            seed: default_benchmark_seed(),
+            chunk_probe_origin_x: default_chunk_probe_origin_x(),
+            chunk_probe_origin_z: default_chunk_probe_origin_z(),
+            chunk_probe_stride: default_chunk_probe_stride(),
+            render_distance: default_render_distance(),
+            simulation_distance: default_simulation_distance(),
+            max_fps: default_max_fps(),
+            enable_vsync: default_enable_vsync(),
         }
     }
 }
@@ -68,6 +92,68 @@ const fn default_chunk_samples() -> u32 {
 
 const fn default_entity_count() -> u32 {
     96
+}
+
+// These values are part of the provisional benchmark contract. They belong
+// in the run manifest so a future Adapter can replace them without changing
+// the universal Launcher protocol.
+const fn default_benchmark_seed() -> i64 {
+    -6_372_891_104_223_171_901
+}
+
+const fn default_chunk_probe_origin_x() -> i32 {
+    1_000_000
+}
+
+const fn default_chunk_probe_origin_z() -> i32 {
+    1_000_000
+}
+
+const fn default_chunk_probe_stride() -> u32 {
+    8
+}
+
+const fn default_render_distance() -> u32 {
+    12
+}
+
+const fn default_simulation_distance() -> u32 {
+    12
+}
+
+const fn default_max_fps() -> u32 {
+    260
+}
+
+const fn default_enable_vsync() -> bool {
+    false
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ScoreProfile {
+    pub id: String,
+    pub status: String,
+    pub average_fps_baseline: f64,
+    pub median_mspt_baseline: f64,
+    pub chunks_per_second_baseline: f64,
+    pub graphics_weight: f64,
+    pub simulation_weight: f64,
+    pub world_generation_weight: f64,
+}
+
+impl Default for ScoreProfile {
+    fn default() -> Self {
+        Self {
+            id: "MB-SCORE-PROVISIONAL-v0".to_string(),
+            status: "PROVISIONAL".to_string(),
+            average_fps_baseline: 120.0,
+            median_mspt_baseline: 16.67,
+            chunks_per_second_baseline: 20.0,
+            graphics_weight: 30.0,
+            simulation_weight: 25.0,
+            world_generation_weight: 20.0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -103,7 +189,7 @@ fn default_capture_backend() -> String {
     "pending".to_string()
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RunManifest {
     pub schema: u32,
     pub run_id: String,
@@ -118,6 +204,8 @@ pub struct RunManifest {
     pub selected_mods: Vec<ManifestMod>,
     #[serde(default)]
     pub benchmark: BenchmarkConfig,
+    #[serde(default)]
+    pub score: ScoreProfile,
     #[serde(default)]
     pub capture: CaptureConfig,
     #[serde(default)]
@@ -160,6 +248,8 @@ pub struct ResultSummary {
     pub status: String,
     pub verification: String,
     pub score_version: String,
+    #[serde(default = "default_score_status")]
+    pub score_status: String,
     pub profile: String,
     pub suite_version: String,
     pub scores: CategoryScores,
@@ -169,6 +259,10 @@ pub struct ResultSummary {
     pub completed_at: String,
     #[serde(default)]
     pub metadata: BTreeMap<String, serde_json::Value>,
+}
+
+fn default_score_status() -> String {
+    "PROVISIONAL".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

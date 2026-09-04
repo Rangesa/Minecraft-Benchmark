@@ -32,7 +32,7 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Real Minecraft 1.21.1 Fabric Adapter runtime.
+ * Fabric Adapter runtime for the current benchmark contract.
  *
  * <p>The launcher creates {@code minebench/run.json} in a temporary game
  * directory. The adapter only writes below that directory and drives the
@@ -45,6 +45,22 @@ public final class BenchmarkSession {
     private static final int DEFAULT_SIMULATION_TICKS = 180;
     private static final int DEFAULT_CHUNK_SAMPLES = 32;
     private static final int DEFAULT_ENTITY_COUNT = 96;
+    private static final long DEFAULT_BENCHMARK_SEED = -6372891104223171901L;
+    private static final int DEFAULT_CHUNK_PROBE_ORIGIN_X = 1_000_000;
+    private static final int DEFAULT_CHUNK_PROBE_ORIGIN_Z = 1_000_000;
+    private static final int DEFAULT_CHUNK_PROBE_STRIDE = 8;
+    private static final int DEFAULT_RENDER_DISTANCE = 12;
+    private static final int DEFAULT_SIMULATION_DISTANCE = 12;
+    private static final int DEFAULT_MAX_FPS = 260;
+    private static final boolean DEFAULT_ENABLE_VSYNC = false;
+    private static final String DEFAULT_SCORE_VERSION = "MB-SCORE-PROVISIONAL-v0";
+    private static final String DEFAULT_SCORE_STATUS = "PROVISIONAL";
+    private static final double DEFAULT_FPS_BASELINE = 120.0;
+    private static final double DEFAULT_MSPT_BASELINE = 16.67;
+    private static final double DEFAULT_CHUNKS_PER_SECOND_BASELINE = 20.0;
+    private static final double DEFAULT_GRAPHICS_WEIGHT = 30.0;
+    private static final double DEFAULT_SIMULATION_WEIGHT = 25.0;
+    private static final double DEFAULT_WORLD_WEIGHT = 20.0;
     private static final int CREATE_WORLD_WAIT_TICKS = 100;
 
     private enum Phase {
@@ -75,6 +91,22 @@ public final class BenchmarkSession {
     private int simulationTicks = DEFAULT_SIMULATION_TICKS;
     private int chunkSamplesTarget = DEFAULT_CHUNK_SAMPLES;
     private int entityCount = DEFAULT_ENTITY_COUNT;
+    private long benchmarkSeed = DEFAULT_BENCHMARK_SEED;
+    private int chunkProbeOriginX = DEFAULT_CHUNK_PROBE_ORIGIN_X;
+    private int chunkProbeOriginZ = DEFAULT_CHUNK_PROBE_ORIGIN_Z;
+    private int chunkProbeStride = DEFAULT_CHUNK_PROBE_STRIDE;
+    private int renderDistance = DEFAULT_RENDER_DISTANCE;
+    private int simulationDistance = DEFAULT_SIMULATION_DISTANCE;
+    private int maxFps = DEFAULT_MAX_FPS;
+    private boolean enableVsync = DEFAULT_ENABLE_VSYNC;
+    private String scoreVersion = DEFAULT_SCORE_VERSION;
+    private String scoreStatus = DEFAULT_SCORE_STATUS;
+    private double fpsBaseline = DEFAULT_FPS_BASELINE;
+    private double msptBaseline = DEFAULT_MSPT_BASELINE;
+    private double chunksPerSecondBaseline = DEFAULT_CHUNKS_PER_SECOND_BASELINE;
+    private double graphicsWeight = DEFAULT_GRAPHICS_WEIGHT;
+    private double simulationWeight = DEFAULT_SIMULATION_WEIGHT;
+    private double worldWeight = DEFAULT_WORLD_WEIGHT;
 
     private long clientTick;
     private long warmupTick;
@@ -85,10 +117,11 @@ public final class BenchmarkSession {
     private boolean worldCreationRequested;
     private boolean sceneRequested;
     private volatile boolean scenePrepared;
+    private boolean settingsApplied;
     private boolean shutdownRequested;
     private long shutdownAtTick = Long.MAX_VALUE;
     private long serverTickStartNanos;
-    private BlockPos chunkOrigin = BlockPos.ORIGIN;
+    private long observedWorldSeed;
     private long renderStartNanos;
 
     private final List<Long> frameTimesNanos = Collections.synchronizedList(new ArrayList<>());
@@ -120,6 +153,7 @@ public final class BenchmarkSession {
                 driveWorldCreation(client);
                 return;
             }
+            applyBenchmarkSettings(client);
             prepareScene(client);
             if (!scenePrepared) {
                 return;
@@ -234,8 +268,12 @@ public final class BenchmarkSession {
         if (phase == Phase.CHUNK_GENERATION && chunkSampleCount < chunkSamplesTarget) {
             ServerWorld world = server.getOverworld();
             int offset = chunkSampleCount;
-            int chunkX = chunkOrigin.getX() + 3 + (offset % 8);
-            int chunkZ = chunkOrigin.getZ() + 3 + (offset / 8);
+            int chunkX = chunkProbeCoordinate(chunkProbeOriginX, offset % 8);
+            int chunkZ = chunkProbeCoordinate(chunkProbeOriginZ, offset / 8);
+            if (world.getChunkManager().isChunkLoaded(chunkX, chunkZ)) {
+                fail("Chunk probe selected an already loaded chunk: " + chunkX + "," + chunkZ);
+                return;
+            }
             long start = System.nanoTime();
             world.getChunk(chunkX, chunkZ, ChunkStatus.FULL, true);
             long finishedAt = System.nanoTime();
@@ -271,6 +309,24 @@ public final class BenchmarkSession {
             simulationTicks = positiveInt(benchmark, "simulation_ticks", DEFAULT_SIMULATION_TICKS);
             chunkSamplesTarget = positiveInt(benchmark, "chunk_samples", DEFAULT_CHUNK_SAMPLES);
             entityCount = positiveInt(benchmark, "entity_count", DEFAULT_ENTITY_COUNT);
+            benchmarkSeed = readLong(benchmark, "seed", DEFAULT_BENCHMARK_SEED);
+            chunkProbeOriginX = readInt(benchmark, "chunk_probe_origin_x", DEFAULT_CHUNK_PROBE_ORIGIN_X);
+            chunkProbeOriginZ = readInt(benchmark, "chunk_probe_origin_z", DEFAULT_CHUNK_PROBE_ORIGIN_Z);
+            chunkProbeStride = positiveInt(benchmark, "chunk_probe_stride", DEFAULT_CHUNK_PROBE_STRIDE);
+            renderDistance = positiveInt(benchmark, "render_distance", DEFAULT_RENDER_DISTANCE);
+            simulationDistance = positiveInt(benchmark, "simulation_distance", DEFAULT_SIMULATION_DISTANCE);
+            maxFps = positiveInt(benchmark, "max_fps", DEFAULT_MAX_FPS);
+            enableVsync = readBoolean(benchmark, "enable_vsync", DEFAULT_ENABLE_VSYNC);
+            JsonObject score = object(config, "score");
+            scoreVersion = readString(score, "id", DEFAULT_SCORE_VERSION);
+            scoreStatus = readString(score, "status", DEFAULT_SCORE_STATUS);
+            fpsBaseline = positiveDouble(score, "average_fps_baseline", DEFAULT_FPS_BASELINE);
+            msptBaseline = positiveDouble(score, "median_mspt_baseline", DEFAULT_MSPT_BASELINE);
+            chunksPerSecondBaseline = positiveDouble(score, "chunks_per_second_baseline",
+                    DEFAULT_CHUNKS_PER_SECOND_BASELINE);
+            graphicsWeight = positiveDouble(score, "graphics_weight", DEFAULT_GRAPHICS_WEIGHT);
+            simulationWeight = positiveDouble(score, "simulation_weight", DEFAULT_SIMULATION_WEIGHT);
+            worldWeight = positiveDouble(score, "world_generation_weight", DEFAULT_WORLD_WEIGHT);
             statusPath = runDirectory.resolve("minebench").resolve("status.json");
             resultDirectory = runDirectory.resolve("minebench").resolve("result");
             Files.createDirectories(resultDirectory);
@@ -297,12 +353,32 @@ public final class BenchmarkSession {
 
         if (client.currentScreen instanceof CreateWorldScreen screen
                 && clientTick >= nextCreateWorldActionTick && createWorldAttempts < 5) {
+            screen.getWorldCreator().setWorldName("MineBench Benchmark");
+            screen.getWorldCreator().setSeed(Long.toString(benchmarkSeed));
+            screen.getWorldCreator().setBonusChestEnabled(false);
             ((CreateWorldScreenInvoker) screen).minebench$createLevel();
             createWorldAttempts++;
             nextCreateWorldActionTick = clientTick + 30;
             writeStatus("WAITING_FOR_WORLD", 0, 0,
-                    "Starting the isolated singleplayer world");
+                    "Starting the isolated deterministic benchmark world");
         }
+    }
+
+    private void applyBenchmarkSettings(MinecraftClient client) {
+        if (settingsApplied) {
+            return;
+        }
+        client.options.getViewDistance().setValue(clamp(renderDistance, 2, 32));
+        client.options.getSimulationDistance().setValue(clamp(simulationDistance, 2, 32));
+        client.options.getMaxFps().setValue(clamp(maxFps, 10, 260));
+        client.options.getEnableVsync().setValue(enableVsync);
+        client.options.resourcePacks.clear();
+        client.options.incompatibleResourcePacks.clear();
+        client.options.write();
+        settingsApplied = true;
+        BenchmarkMod.LOGGER.info(
+                "[MineBench] Applied benchmark settings: renderDistance={}, simulationDistance={}, maxFps={}, vsync={}, sourceSettings=ignored",
+                renderDistance, simulationDistance, maxFps, enableVsync);
     }
 
     private void prepareScene(MinecraftClient client) {
@@ -311,11 +387,15 @@ public final class BenchmarkSession {
         }
         sceneRequested = true;
         BlockPos center = client.player.getBlockPos();
-        chunkOrigin = new BlockPos(center.getX() >> 4, 0, center.getZ() >> 4);
         MinecraftServer server = client.getServer();
         server.execute(() -> {
             try {
                 ServerWorld world = server.getOverworld();
+                observedWorldSeed = world.getSeed();
+                if (observedWorldSeed != benchmarkSeed) {
+                    fail("World seed mismatch: expected " + benchmarkSeed + ", got " + observedWorldSeed);
+                    return;
+                }
                 for (int i = 0; i < entityCount; i++) {
                     int dx = (i % 16) - 8;
                     int dz = (i / 16) - 3;
@@ -346,6 +426,11 @@ public final class BenchmarkSession {
         spawnedEntityIds.clear();
     }
 
+    private int chunkProbeCoordinate(int origin, int index) {
+        long coordinate = origin + (long) index * chunkProbeStride;
+        return (int) Math.max(Integer.MIN_VALUE, Math.min(Integer.MAX_VALUE, coordinate));
+    }
+
     private void finalizeResult() {
         phase = Phase.COMPLETE;
         try {
@@ -365,7 +450,8 @@ public final class BenchmarkSession {
             summary.addProperty("status", "COMPLETE");
             summary.addProperty("verification", hasPresentMonCapture()
                     ? "LOCAL_REAL_PRESENTMON" : "LOCAL_REAL_ADAPTER");
-            summary.addProperty("score_version", "MB-SCORE-v1");
+            summary.addProperty("score_version", scoreVersion);
+            summary.addProperty("score_status", scoreStatus);
             summary.addProperty("profile", profile);
             summary.addProperty("suite_version", suiteVersion);
 
@@ -383,6 +469,14 @@ public final class BenchmarkSession {
             metricJson.addProperty("p99_mspt", metrics.p99Mspt);
             metricJson.addProperty("chunks_per_second", metrics.chunksPerSecond);
             summary.add("metrics", metricJson);
+            JsonObject scoreProfile = new JsonObject();
+            scoreProfile.addProperty("average_fps_baseline", fpsBaseline);
+            scoreProfile.addProperty("median_mspt_baseline", msptBaseline);
+            scoreProfile.addProperty("chunks_per_second_baseline", chunksPerSecondBaseline);
+            scoreProfile.addProperty("graphics_weight", graphicsWeight);
+            scoreProfile.addProperty("simulation_weight", simulationWeight);
+            scoreProfile.addProperty("world_generation_weight", worldWeight);
+            summary.add("score_profile", scoreProfile);
             summary.addProperty("telemetry_sha256", sha256(telemetryBytes));
             summary.addProperty("completed_at", Instant.now().toString());
 
@@ -393,7 +487,19 @@ public final class BenchmarkSession {
             metadata.addProperty("loader", loader);
             metadata.addProperty("frame_timing", "GameRenderer.render hook");
             metadata.addProperty("server_timing", "ServerTickEvents START/END");
-            metadata.addProperty("chunk_timing", "ServerWorld.getChunk FULL");
+            metadata.addProperty("chunk_timing", "ServerWorld.getChunk FULL on absolute remote probes");
+            metadata.addProperty("benchmark_seed", benchmarkSeed);
+            metadata.addProperty("observed_world_seed", observedWorldSeed);
+            metadata.addProperty("settings_policy", "benchmark_defaults_only");
+            metadata.addProperty("render_distance", renderDistance);
+            metadata.addProperty("simulation_distance", simulationDistance);
+            metadata.addProperty("max_fps", maxFps);
+            metadata.addProperty("enable_vsync", enableVsync);
+            metadata.addProperty("chunk_probe_origin_x", chunkProbeOriginX);
+            metadata.addProperty("chunk_probe_origin_z", chunkProbeOriginZ);
+            metadata.addProperty("chunk_probe_stride", chunkProbeStride);
+            metadata.addProperty("chunk_probe_policy", "absolute_remote_unloaded_chunks");
+            metadata.addProperty("score_status", scoreStatus);
             metadata.addProperty("graphics_samples", frameTimesNanos.size());
             metadata.addProperty("simulation_samples", serverTickTimesNanos.size());
             metadata.addProperty("chunk_samples", chunkTimesNanos.size());
@@ -479,10 +585,10 @@ public final class BenchmarkSession {
         double p99Mspt = percentile(serverTickTimesNanos, 0.99) / 1_000_000.0;
         double chunksPerSecond = chunkTimesNanos.isEmpty()
                 ? 0.0 : 1_000_000_000.0 / Math.max(1.0, mean(chunkTimesNanos));
-        double graphicsScore = positiveScore(averageFps / 120.0);
-        double simulationScore = positiveScore(16.67 / Math.max(0.001, medianMspt));
-        double worldScore = positiveScore(chunksPerSecond / 20.0);
-        double overall = geometricMean(graphicsScore, simulationScore, worldScore);
+        double graphicsScore = positiveScore(averageFps / fpsBaseline);
+        double simulationScore = positiveScore(msptBaseline / Math.max(0.001, medianMspt));
+        double worldScore = positiveScore(chunksPerSecond / chunksPerSecondBaseline);
+        double overall = weightedGeometricMean(graphicsScore, simulationScore, worldScore);
         return new Metrics(averageFps, onePercentLowFps, medianMspt, p99Mspt,
                 chunksPerSecond, graphicsScore, simulationScore, worldScore, overall);
     }
@@ -589,12 +695,12 @@ public final class BenchmarkSession {
         return Math.max(0.0, Math.min(100_000.0, normalized * 10_000.0));
     }
 
-    private static double geometricMean(double... values) {
-        double logSum = 0.0;
-        for (double value : values) {
-            logSum += Math.log(Math.max(Double.MIN_VALUE, value));
-        }
-        return Math.exp(logSum / values.length);
+    private double weightedGeometricMean(double graphics, double simulation, double world) {
+        double totalWeight = graphicsWeight + simulationWeight + worldWeight;
+        double logSum = graphicsWeight * Math.log(Math.max(Double.MIN_VALUE, graphics))
+                + simulationWeight * Math.log(Math.max(Double.MIN_VALUE, simulation))
+                + worldWeight * Math.log(Math.max(Double.MIN_VALUE, world));
+        return Math.exp(logSum / Math.max(1.0, totalWeight));
     }
 
     private static JsonObject object(JsonObject parent, String key) {
@@ -612,6 +718,31 @@ public final class BenchmarkSession {
         return value != null && value.isJsonPrimitive() ? value.getAsBoolean() : fallback;
     }
 
+    private static long readLong(JsonObject object, String key, long fallback) {
+        JsonElement value = object == null ? null : object.get(key);
+        if (value == null || !value.isJsonPrimitive()) {
+            return fallback;
+        }
+        try {
+            return value.getAsLong();
+        } catch (RuntimeException error) {
+            return fallback;
+        }
+    }
+
+    private static double positiveDouble(JsonObject object, String key, double fallback) {
+        JsonElement value = object == null ? null : object.get(key);
+        if (value == null || !value.isJsonPrimitive()) {
+            return fallback;
+        }
+        try {
+            double parsed = value.getAsDouble();
+            return Double.isFinite(parsed) && parsed > 0.0 ? parsed : fallback;
+        } catch (RuntimeException error) {
+            return fallback;
+        }
+    }
+
     private static int positiveInt(JsonObject object, String key, int fallback) {
         JsonElement value = object == null ? null : object.get(key);
         if (value == null || !value.isJsonPrimitive()) {
@@ -622,6 +753,22 @@ public final class BenchmarkSession {
         } catch (NumberFormatException error) {
             return fallback;
         }
+    }
+
+    private static int readInt(JsonObject object, String key, int fallback) {
+        JsonElement value = object == null ? null : object.get(key);
+        if (value == null || !value.isJsonPrimitive()) {
+            return fallback;
+        }
+        try {
+            return value.getAsInt();
+        } catch (RuntimeException error) {
+            return fallback;
+        }
+    }
+
+    private static int clamp(int value, int minimum, int maximum) {
+        return Math.max(minimum, Math.min(maximum, value));
     }
 
     private record Metrics(double averageFps, double onePercentLowFps, double medianMspt,

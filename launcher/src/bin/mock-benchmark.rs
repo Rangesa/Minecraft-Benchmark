@@ -197,6 +197,7 @@ where
         status: "COMPLETE".to_string(),
         verification: "UNVERIFIED".to_string(),
         score_version: "MOCK-SCORE-v1".to_string(),
+        score_status: "MOCK_ONLY".to_string(),
         profile: manifest.profile.clone(),
         suite_version: manifest.suite_version.clone(),
         scores,

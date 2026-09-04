@@ -1,3 +1,4 @@
+use crate::adapter::{EMBEDDED_ADAPTER_LOADER_VERSION, EMBEDDED_ADAPTER_MINECRAFT_VERSION};
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
 use sha1::{Digest, Sha1};
@@ -12,7 +13,6 @@ const MOJANG_VERSION_MANIFEST: &str =
 const FABRIC_PROFILE_TEMPLATE: &str =
     "https://meta.fabricmc.net/v2/versions/loader/{version}/{loader}/profile/json";
 const FABRIC_MAVEN: &str = "https://maven.fabricmc.net/";
-const DEFAULT_FABRIC_LOADER: &str = "0.19.5";
 const FABRIC_API_VERSION: &str = "0.116.17+1.21.1";
 const FABRIC_API_SHA1: &str = "810b2b0195371a012906241d8b85a32a1d6de53c";
 const FABRIC_API_SIZE: u64 = 2_452_735;
@@ -40,9 +40,10 @@ pub struct RuntimeSpec {
 }
 
 pub fn prepare_fabric_runtime(request: &FabricRuntimeRequest) -> Result<RuntimeSpec> {
-    if request.minecraft_version != "1.21.1" {
+    if request.minecraft_version != EMBEDDED_ADAPTER_MINECRAFT_VERSION {
         bail!(
-            "the integrated Fabric Adapter currently supports Minecraft 1.21.1; got {}",
+            "the integrated Fabric Adapter currently supports Minecraft {}; got {}",
+            EMBEDDED_ADAPTER_MINECRAFT_VERSION,
             request.minecraft_version
         );
     }
@@ -55,7 +56,7 @@ pub fn prepare_fabric_runtime(request: &FabricRuntimeRequest) -> Result<RuntimeS
     let libraries_dir = cache.join("libraries");
     let natives_dir = cache.join("natives").join(format!(
         "{}-{}",
-        request.minecraft_version, DEFAULT_FABRIC_LOADER
+        request.minecraft_version, EMBEDDED_ADAPTER_LOADER_VERSION
     ));
     fs::create_dir_all(&minecraft_cache).with_context(|| {
         format!(
@@ -124,7 +125,7 @@ pub fn prepare_fabric_runtime(request: &FabricRuntimeRequest) -> Result<RuntimeS
     }
     classpath.push(client_jar.clone());
 
-    let assets = ensure_assets(&version_json, &cache)?;
+    let assets = ensure_assets(&version_json, &cache, &request.minecraft_version)?;
     let java_path = find_java()?;
     let classpath_value = classpath
         .iter()
@@ -238,7 +239,7 @@ fn choose_loader_version(requested: Option<&str>) -> String {
     {
         return requested.unwrap().trim().to_string();
     }
-    DEFAULT_FABRIC_LOADER.to_string()
+    EMBEDDED_ADAPTER_LOADER_VERSION.to_string()
 }
 
 fn fetch_minecraft_version(version: &str, cache: &Path) -> Result<Value> {
@@ -413,7 +414,7 @@ fn extract_native_jar(path: &Path, destination: &Path, library: &Value) -> Resul
     Ok(())
 }
 
-fn ensure_assets(version_json: &Value, cache: &Path) -> Result<Assets> {
+fn ensure_assets(version_json: &Value, cache: &Path, minecraft_version: &str) -> Result<Assets> {
     let asset_index = version_json
         .get("assetIndex")
         .context("Mojang version JSON has no assetIndex")?;
@@ -435,11 +436,13 @@ fn ensure_assets(version_json: &Value, cache: &Path) -> Result<Assets> {
                 index_name: id.to_string(),
             });
         }
-        let loom = root.join("indexes").join(format!("1.21.1-{id}.json"));
+        let loom = root
+            .join("indexes")
+            .join(format!("{minecraft_version}-{id}.json"));
         if loom.is_file() {
             return Ok(Assets {
                 directory: root,
-                index_name: format!("1.21.1-{id}"),
+                index_name: format!("{minecraft_version}-{id}"),
             });
         }
     }
@@ -715,7 +718,8 @@ fn validate_java(path: &Path) -> Result<PathBuf> {
     })?;
     if major < 21 {
         bail!(
-            "Java 21 or newer is required for Minecraft 1.21.1; {} reports Java {}",
+            "Java 21 or newer is required for Minecraft {}; {} reports Java {}",
+            EMBEDDED_ADAPTER_MINECRAFT_VERSION,
             path.display(),
             major
         );

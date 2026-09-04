@@ -7,6 +7,13 @@ use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
+pub const EMBEDDED_ADAPTER_ID: &str = "mcbenchmark-fabric";
+pub const EMBEDDED_ADAPTER_VERSION: &str = "1.0";
+pub const EMBEDDED_ADAPTER_MINECRAFT_VERSION: &str = "1.21.1";
+pub const EMBEDDED_ADAPTER_LOADER_FAMILY: &str = "fabric";
+pub const EMBEDDED_ADAPTER_LOADER_VERSION: &str = "0.19.5";
+pub const EMBEDDED_ADAPTER_FILE_NAME: &str = "mcbenchmark-fabric-1.21.1.jar";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdapterManifest {
     pub schema: u32,
@@ -37,6 +44,40 @@ pub struct AdapterArtifact {
 pub enum AdapterResolution {
     Adapter(AdapterArtifact),
     ExternalFallback { reason: String },
+}
+
+pub fn embedded_real_adapter() -> AdapterArtifact {
+    AdapterArtifact {
+        id: EMBEDDED_ADAPTER_ID.to_string(),
+        version: EMBEDDED_ADAPTER_VERSION.to_string(),
+        kind: "minecraft".to_string(),
+        loader_family: EMBEDDED_ADAPTER_LOADER_FAMILY.to_string(),
+        minecraft_versions: vec![EMBEDDED_ADAPTER_MINECRAFT_VERSION.to_string()],
+        loader_versions: vec![EMBEDDED_ADAPTER_LOADER_VERSION.to_string()],
+        file_name: EMBEDDED_ADAPTER_FILE_NAME.to_string(),
+        download_url: None,
+        sha512: None,
+    }
+}
+
+pub fn resolve_embedded_real_adapter(
+    minecraft_version: &str,
+    loader: &str,
+    loader_version: Option<&str>,
+) -> Result<AdapterArtifact> {
+    let adapter = embedded_real_adapter();
+    if !matches_value(&adapter.loader_family, loader)
+        || !matches_any(&adapter.minecraft_versions, minecraft_version)
+        || (loader_version.is_some_and(|version| !matches_any(&adapter.loader_versions, version)))
+    {
+        bail!(
+            "no embedded Adapter matches Minecraft {} / {} / {}",
+            minecraft_version,
+            loader,
+            loader_version.unwrap_or("loader version unknown")
+        );
+    }
+    Ok(adapter)
 }
 
 impl AdapterManifest {
@@ -114,17 +155,7 @@ pub fn development_manifest() -> AdapterManifest {
         manifest_version: "BUILTIN-MANIFEST-v2".to_string(),
         generated_at: crate::time::now_iso8601(),
         adapters: vec![
-            AdapterArtifact {
-                id: "mcbenchmark-fabric".to_string(),
-                version: "1.0".to_string(),
-                kind: "minecraft".to_string(),
-                loader_family: "fabric".to_string(),
-                minecraft_versions: vec!["1.21.1".to_string()],
-                loader_versions: vec!["0.19.5".to_string()],
-                file_name: "mcbenchmark-fabric-1.21.1.jar".to_string(),
-                download_url: None,
-                sha512: None,
-            },
+            embedded_real_adapter(),
             AdapterArtifact {
                 id: "mock-adapter".to_string(),
                 version: "0.1.0".to_string(),

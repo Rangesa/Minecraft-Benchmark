@@ -1,3 +1,4 @@
+use crate::adapter::resolve_embedded_real_adapter;
 use crate::adapter_embed;
 use crate::external::{
     CaptureReport, ExternalCapturePlan, ensure_presentmon, finish_capture, start_capture,
@@ -127,18 +128,17 @@ fn run_real_after_prepare(
     request: &RealRunRequest,
     sender: &Sender<RunnerEvent>,
 ) -> Result<ResultSummary> {
-    if !request.loader.eq_ignore_ascii_case("fabric") {
-        bail!(
-            "the integrated real runtime currently supports Fabric only; detected/requested loader is {}",
-            request.loader
-        );
-    }
-    if request.minecraft_version != "1.21.1" {
-        bail!(
-            "the integrated Fabric Adapter currently supports Minecraft 1.21.1 only; got {}",
-            request.minecraft_version
-        );
-    }
+    let adapter = resolve_embedded_real_adapter(
+        &request.minecraft_version,
+        &request.loader,
+        request.loader_version.as_deref(),
+    )
+    .with_context(|| {
+        format!(
+            "no real Adapter is available for Minecraft {} / {}",
+            request.minecraft_version, request.loader
+        )
+    })?;
     if request.selected_mods.iter().any(|record| {
         !matches!(
             record.loader_family.to_ascii_lowercase().as_str(),
@@ -156,14 +156,15 @@ fn run_real_after_prepare(
         0.0,
         "Collecting CPU/GPU/RAM/storage/OS information",
     )?;
-    let hardware = collect_hardware().context("hardware collection failed")?;
+    let hardware = collect_hardware(Some(&request.source_instance_dir))
+        .context("hardware collection failed")?;
 
     write_launcher_status(
         prepared,
         sender,
         "PREPARING",
         0.05,
-        "Materializing the embedded Fabric 1.21.1 Adapter",
+        &format!("Materializing embedded Adapter {}", adapter.id),
     )?;
     let adapter_path = adapter_embed::materialize(&request.data_dir)?;
 
@@ -184,22 +185,18 @@ fn run_real_after_prepare(
         heap_mb: request.heap_mb,
     })?;
 
-    inject_mod(
-        &prepared.instance_dir,
-        &adapter_path,
-        "mcbenchmark-fabric-1.21.1.jar",
-    )?;
+    inject_mod(&prepared.instance_dir, &adapter_path, &adapter.file_name)?;
     if !request.selected_mods.iter().any(|record| {
         record
             .mod_id
             .as_deref()
             .is_some_and(|mod_id| mod_id.eq_ignore_ascii_case("fabric-api"))
     }) {
-        inject_mod(
-            &prepared.instance_dir,
-            &fabric_api_path,
-            &format!("fabric-api-{}.jar", "0.116.17+1.21.1"),
-        )?;
+        let fabric_api_name = fabric_api_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .context("Fabric API cache path has no safe file name")?;
+        inject_mod(&prepared.instance_dir, &fabric_api_path, fabric_api_name)?;
     }
 
     let capture_plan = if !request.enable_presentmon {
@@ -236,7 +233,10 @@ fn run_real_after_prepare(
         "LAUNCHING",
         0.20,
         &format!(
-            "Launching Minecraft 1.21.1 Fabric ({} libraries, Java {})",
+            "Launching Minecraft {} {} via Adapter {} ({} libraries, Java {})",
+            request.minecraft_version,
+            request.loader,
+            adapter.id,
             runtime.library_count,
             runtime.java_path.display()
         ),

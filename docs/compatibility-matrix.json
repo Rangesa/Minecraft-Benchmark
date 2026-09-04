@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "generated_at": "2026-09-04",
+  "entries": [
+    {
+      "minecraft": "1.21.1",
+      "loader": "fabric",
+      "loader_version": "0.19.5",
+      "tier": "STANDARD",
+      "adapter": "mcbenchmark-fabric",
+      "last_tested": "2026-09-04",
+      "tests": {
+        "environment_detection": true,
+        "adapter_resolution": true,
+        "temporary_instance": true,
+        "real_launch": true,
+        "autorun": true,
+        "warmup": true,
+        "deep_telemetry": true,
+        "result_schema": true,
+        "automatic_shutdown": true,
+        "source_instance_unchanged": true,
+        "external_frametime": false
+      },
+      "notes": "Real Adapter E2E passed. PresentMon is integrated, but the current Windows ETW lifecycle needs a clean repeatable CSV-flush regression before promotion to FULL."
+    }
+  ]
+}

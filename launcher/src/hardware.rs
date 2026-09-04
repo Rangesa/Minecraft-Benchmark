@@ -1,14 +1,15 @@
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
 use std::collections::BTreeMap;
+use std::path::Path;
 use std::process::Command;
 
 /// Collect the host facts used to describe a local run. On Windows the
 /// values come from CIM/WMI rather than being guessed from environment
 /// variables; no serial numbers or account identifiers are collected.
-pub fn collect_hardware() -> Result<BTreeMap<String, String>> {
+pub fn collect_hardware(instance_dir: Option<&Path>) -> Result<BTreeMap<String, String>> {
     if cfg!(windows) {
-        match collect_with_powershell() {
+        match collect_with_powershell(instance_dir) {
             Ok(values) if !values.is_empty() => return Ok(values),
             Ok(_) => {}
             Err(error) => {
@@ -21,7 +22,7 @@ pub fn collect_hardware() -> Result<BTreeMap<String, String>> {
     Ok(collect_fallback())
 }
 
-fn collect_with_powershell() -> Result<BTreeMap<String, String>> {
+fn collect_with_powershell(instance_dir: Option<&Path>) -> Result<BTreeMap<String, String>> {
     // Keep this script static. It is passed as one argument and never contains
     // a path or other user-controlled value.
     let script = r#"
@@ -30,12 +31,50 @@ $utf8NoBom = New-Object -TypeName System.Text.UTF8Encoding -ArgumentList $false
 $OutputEncoding = $utf8NoBom
 $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
 $gpus = @(Get-CimInstance Win32_VideoController)
+$activeGpu = $gpus |
+  Where-Object {
+    $_.CurrentHorizontalResolution -gt 0 -and $_.CurrentVerticalResolution -gt 0
+  } |
+  Select-Object -First 1
+if (-not $activeGpu) {
+  $activeGpu = $gpus | Where-Object { $_.Status -eq 'OK' } | Select-Object -First 1
+}
 $computer = Get-CimInstance Win32_ComputerSystem | Select-Object -First 1
 $board = Get-CimInstance Win32_BaseBoard | Select-Object -First 1
 $os = Get-CimInstance Win32_OperatingSystem | Select-Object -First 1
-$disk = Get-CimInstance Win32_LogicalDisk |
-  Where-Object { $_.DeviceID -eq $env:SystemDrive } |
-  Select-Object -First 1
+$instanceDrive = $null
+try {
+  if ($env:MINEBENCH_INSTANCE_DIR) {
+    $instanceRoot = [System.IO.Path]::GetPathRoot(
+      [System.IO.Path]::GetFullPath($env:MINEBENCH_INSTANCE_DIR))
+    if ($instanceRoot -match '^[A-Za-z]:\\') {
+      $instanceDrive = $instanceRoot.Substring(0, 2).ToUpperInvariant()
+    }
+  }
+} catch {
+  $instanceDrive = $null
+}
+$selectedDrive = $instanceDrive
+$storageSelection = 'minecraft_instance_drive'
+$disks = @(Get-CimInstance Win32_LogicalDisk)
+$disk = $disks | Where-Object { $_.DeviceID -eq $selectedDrive } | Select-Object -First 1
+if (-not $disk) {
+  $selectedDrive = [string]$env:SystemDrive
+  $storageSelection = 'system_drive_fallback'
+  $disk = $disks | Where-Object { $_.DeviceID -eq $selectedDrive } | Select-Object -First 1
+}
+$physicalDisk = $null
+try {
+  if ($selectedDrive -match '^[A-Za-z]:$') {
+    $partition = Get-Partition -DriveLetter $selectedDrive.Substring(0, 1) -ErrorAction Stop |
+      Select-Object -First 1
+    if ($partition) {
+      $physicalDisk = Get-Disk -Number $partition.DiskNumber -ErrorAction Stop
+    }
+  }
+} catch {
+  $physicalDisk = $null
+}
 $gpuNames = ($gpus | ForEach-Object { $_.Name }) -join '; '
 $gpuMemory = ($gpus | ForEach-Object { [uint64]$_.AdapterRAM } | Measure-Object -Sum).Sum
 [ordered]@{
@@ -45,9 +84,17 @@ $gpuMemory = ($gpus | ForEach-Object { [uint64]$_.AdapterRAM } | Measure-Object 
   cpu_max_clock_mhz = [string]$cpu.MaxClockSpeed
   gpu_name = [string]$gpuNames
   gpu_memory_bytes = [string]$gpuMemory
+  gpu_active_name = [string]$activeGpu.Name
+  gpu_active_driver_version = [string]$activeGpu.DriverVersion
+  gpu_active_selection = if ($activeGpu) { 'attached_display_or_first_ok' } else { 'unresolved' }
   ram_bytes = [string]$computer.TotalPhysicalMemory
   motherboard = ([string]$board.Manufacturer + ' ' + [string]$board.Product).Trim()
   storage_system_drive = [string]$env:SystemDrive
+  storage_selected_drive = [string]$selectedDrive
+  storage_selection = [string]$storageSelection
+  storage_disk_model = [string]$physicalDisk.FriendlyName
+  storage_media_type = [string]$physicalDisk.MediaType
+  storage_bus_type = [string]$physicalDisk.BusType
   storage_total_bytes = [string]$disk.Size
   storage_free_bytes = [string]$disk.FreeSpace
   os_caption = [string]$os.Caption
@@ -58,15 +105,19 @@ $gpuMemory = ($gpus | ForEach-Object { [uint64]$_.AdapterRAM } | Measure-Object 
 "#;
 
     let shell = find_powershell().context("PowerShell is not available for hardware collection")?;
-    let output = Command::new(shell)
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            script,
-        ])
+    let mut command = Command::new(shell);
+    command.env_remove("MINEBENCH_INSTANCE_DIR").args([
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        script,
+    ]);
+    if let Some(instance_dir) = instance_dir {
+        command.env("MINEBENCH_INSTANCE_DIR", instance_dir);
+    }
+    let output = command
         .output()
         .context("failed to invoke PowerShell for hardware collection")?;
     if !output.status.success() {

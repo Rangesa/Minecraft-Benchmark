@@ -1,6 +1,7 @@
 use crate::modscan::ModRecord;
 use crate::protocol::{
     BenchmarkConfig, CaptureConfig, Challenge, ManifestMod, ManifestPaths, RunManifest,
+    ScoreProfile,
 };
 use anyhow::Result;
 use chrono::{Duration, Utc};
@@ -55,6 +56,7 @@ pub fn build_manifest_with_config(
         },
         selected_mods: selected_mods.iter().map(manifest_mod).collect(),
         benchmark,
+        score: ScoreProfile::default(),
         capture: CaptureConfig::default(),
         hardware: Default::default(),
     }

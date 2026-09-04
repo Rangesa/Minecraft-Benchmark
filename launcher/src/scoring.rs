@@ -1,4 +1,4 @@
-use crate::protocol::{CategoryScores, MetricSummary, TelemetrySample};
+use crate::protocol::{CategoryScores, MetricSummary, ScoreProfile, TelemetrySample};
 use anyhow::{Result, bail};
 use sha2::{Digest, Sha256};
 
@@ -19,8 +19,10 @@ pub fn calculate(samples: &[TelemetrySample]) -> Result<(MetricSummary, Category
         .filter_map(|sample| sample.chunk_time_ns)
         .collect::<Vec<_>>();
     if frame_times.is_empty() || tick_times.is_empty() || chunk_times.is_empty() {
-        bail!("telemetry does not contain all required mock test samples");
+        bail!("telemetry does not contain all required benchmark samples");
     }
+
+    let profile = ScoreProfile::default();
 
     let average_frame_ns = mean(&frame_times);
     let average_fps = 1_000_000_000.0 / average_frame_ns;
@@ -37,14 +39,14 @@ pub fn calculate(samples: &[TelemetrySample]) -> Result<(MetricSummary, Category
         chunks_per_second,
     };
     let scores = CategoryScores {
-        graphics: positive_score(average_fps / 120.0),
-        simulation: positive_score(16.67 / median_mspt),
-        world_generation: positive_score(chunks_per_second / 20.0),
+        graphics: positive_score(average_fps / profile.average_fps_baseline),
+        simulation: positive_score(profile.median_mspt_baseline / median_mspt),
+        world_generation: positive_score(chunks_per_second / profile.chunks_per_second_baseline),
     };
     let overall_score = geometric_mean(&[
-        (scores.graphics, 30.0),
-        (scores.simulation, 25.0),
-        (scores.world_generation, 20.0),
+        (scores.graphics, profile.graphics_weight),
+        (scores.simulation, profile.simulation_weight),
+        (scores.world_generation, profile.world_generation_weight),
     ]);
     Ok((metrics, scores, overall_score))
 }
@@ -130,6 +132,6 @@ mod tests {
     #[test]
     fn incomplete_samples_are_rejected() {
         let error = calculate(&[]).unwrap_err().to_string();
-        assert!(error.contains("required mock test samples"));
+        assert!(error.contains("required benchmark samples"));
     }
 }

@@ -59,10 +59,6 @@ pub fn prepare_run(request: &PrepareRunRequest) -> Result<PreparedRun> {
     fs::create_dir_all(&logs_dir)
         .with_context(|| format!("failed to create {}", logs_dir.display()))?;
 
-    if let Some(source_instance_dir) = &request.source_instance_dir {
-        copy_instance_settings(source_instance_dir, &instance_dir)?;
-    }
-
     let manifest = build_manifest_with_config(
         run_id.clone(),
         &request.minecraft_version,
@@ -115,100 +111,6 @@ fn resolve_for_containment(path: &Path) -> Result<PathBuf> {
         resolved.push(name);
     }
     Ok(resolved)
-}
-
-/// Copy only settings/assets that affect a benchmark. Saves, logs, accounts,
-/// launcher state, and caches are intentionally omitted so the source
-/// instance is never opened for writing and never copied wholesale.
-fn copy_instance_settings(source: &Path, destination: &Path) -> Result<()> {
-    if !source.is_dir() {
-        bail!("source instance is not a directory: {}", source.display());
-    }
-    let source = source
-        .canonicalize()
-        .with_context(|| format!("failed to resolve source instance {}", source.display()))?;
-    if source
-        == destination
-            .canonicalize()
-            .unwrap_or_else(|_| destination.to_path_buf())
-    {
-        bail!("source instance and temporary instance must be different");
-    }
-
-    for directory in ["config", "resourcepacks", "shaderpacks"] {
-        let source_dir = source.join(directory);
-        if source_dir.is_dir() {
-            copy_tree_without_links(&source_dir, &destination.join(directory))?;
-        }
-    }
-    for filename in ["options.txt", "optionsof.txt", "optionsshaders.txt"] {
-        let source_file = source.join(filename);
-        if source_file.is_file() {
-            copy_file_without_link(&source_file, &destination.join(filename))?;
-        }
-    }
-    Ok(())
-}
-
-fn copy_tree_without_links(source: &Path, destination: &Path) -> Result<()> {
-    let source_type = fs::symlink_metadata(source)
-        .with_context(|| format!("failed to inspect {}", source.display()))?
-        .file_type();
-    if source_type.is_symlink() {
-        bail!(
-            "symbolic-link instance settings are not accepted: {}",
-            source.display()
-        );
-    }
-    fs::create_dir_all(destination).with_context(|| {
-        format!(
-            "failed to create settings directory {}",
-            destination.display()
-        )
-    })?;
-    for entry in fs::read_dir(source)
-        .with_context(|| format!("failed to read settings directory {}", source.display()))?
-    {
-        let entry =
-            entry.with_context(|| format!("failed to read entry in {}", source.display()))?;
-        let source_path = entry.path();
-        let destination_path = destination.join(entry.file_name());
-        let file_type = entry
-            .file_type()
-            .with_context(|| format!("failed to inspect {}", source_path.display()))?;
-        if file_type.is_symlink() {
-            bail!(
-                "symbolic-link instance settings are not accepted: {}",
-                source_path.display()
-            );
-        }
-        if file_type.is_dir() {
-            copy_tree_without_links(&source_path, &destination_path)?;
-        } else if file_type.is_file() {
-            copy_file_without_link(&source_path, &destination_path)?;
-        }
-    }
-    Ok(())
-}
-
-fn copy_file_without_link(source: &Path, destination: &Path) -> Result<()> {
-    let file_type = fs::symlink_metadata(source)
-        .with_context(|| format!("failed to inspect {}", source.display()))?
-        .file_type();
-    if !file_type.is_file() || file_type.is_symlink() {
-        bail!(
-            "source settings file is not a regular file: {}",
-            source.display()
-        );
-    }
-    fs::copy(source, destination).with_context(|| {
-        format!(
-            "failed to copy settings file {} to {}",
-            source.display(),
-            destination.display()
-        )
-    })?;
-    Ok(())
 }
 
 pub fn update_run_manifest(
@@ -304,6 +206,15 @@ mod tests {
         let source = root.join("source-instance");
         let source_mods = source.join("mods");
         fs::create_dir_all(&source_mods).unwrap();
+        fs::write(source.join("options.txt"), b"renderDistance:32\n").unwrap();
+        fs::create_dir_all(source.join("config")).unwrap();
+        fs::write(source.join("config/example.toml"), b"user_setting = true\n").unwrap();
+        fs::create_dir_all(source.join("shaderpacks")).unwrap();
+        fs::write(
+            source.join("shaderpacks/user.zip"),
+            b"not-a-real-shaderpack",
+        )
+        .unwrap();
         let jar = source_mods.join("example.jar");
         let file = fs::File::create(&jar).unwrap();
         let mut writer = zip::ZipWriter::new(file);
@@ -328,6 +239,9 @@ mod tests {
         assert!(prepared.instance_dir.join("mods/example.jar").is_file());
         assert!(jar.is_file());
         assert!(prepared.instance_dir.join("minebench/run.json").is_file());
+        assert!(!prepared.instance_dir.join("options.txt").exists());
+        assert!(!prepared.instance_dir.join("config").exists());
+        assert!(!prepared.instance_dir.join("shaderpacks").exists());
         assert!(prepared.manifest.autorun);
         let _ = fs::remove_dir_all(root);
     }

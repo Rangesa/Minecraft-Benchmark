@@ -491,8 +491,8 @@ fn render_result(
             ui.label(RichText::new("MINEBENCH SCORE").strong());
             ui.label(RichText::new(format!("{:.0}", summary.overall_score)).size(34.0));
             ui.label(format!(
-                "{} / {}",
-                summary.verification, summary.score_version
+                "{} / {} / {}",
+                summary.verification, summary.score_version, summary.score_status
             ));
         });
         ui.separator();
@@ -563,6 +563,7 @@ where
                     simulation_ticks: 40,
                     chunk_samples: 8,
                     entity_count: 16,
+                    ..BenchmarkConfig::default()
                 };
             }
             "--no-presentmon" => {
