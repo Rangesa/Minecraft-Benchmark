@@ -1,19 +1,30 @@
-use crate::adapter::EMBEDDED_ADAPTER_FILE_NAME;
 use anyhow::{Context, Result, bail};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-static EMBEDDED_ADAPTER: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/embedded_adapter.bin"));
+include!(concat!(env!("OUT_DIR"), "/embedded_adapters.rs"));
 
 pub fn embedded_size() -> usize {
-    EMBEDDED_ADAPTER.len()
+    ADAPTERS.iter().map(|(_, bytes)| bytes.len()).sum()
 }
 
 pub fn materialize(cache_dir: &Path) -> Result<PathBuf> {
-    if EMBEDDED_ADAPTER.is_empty() {
-        bail!("the embedded Adapter is empty; run Gradle build before cargo release");
+    materialize_for_version(cache_dir, "1.21.1")
+}
+
+pub fn materialize_for_version(cache_dir: &Path, minecraft_version: &str) -> Result<PathBuf> {
+    crate::catalog::target(minecraft_version)?;
+    let bytes = ADAPTERS
+        .iter()
+        .find(|(version, _)| *version == minecraft_version)
+        .map(|(_, bytes)| *bytes)
+        .context("no embedded Adapter bytes for this Minecraft version")?;
+    if bytes.is_empty() {
+        bail!("the Adapter for Minecraft {minecraft_version} was not built; run python scripts/build_versions.py");
     }
-    let destination = cache_dir.join("adapters").join(EMBEDDED_ADAPTER_FILE_NAME);
+    let destination = cache_dir
+        .join("adapters")
+        .join(format!("mcbenchmark-fabric-{minecraft_version}.jar"));
     let parent = destination
         .parent()
         .context("embedded Adapter destination has no parent")?;
@@ -22,12 +33,12 @@ pub fn materialize(cache_dir: &Path) -> Result<PathBuf> {
     if destination.is_file() {
         let existing = fs::read(&destination)
             .with_context(|| format!("failed to read cached Adapter {}", destination.display()))?;
-        if existing == EMBEDDED_ADAPTER {
+        if existing == bytes {
             return Ok(destination);
         }
     }
     let temporary = destination.with_extension("jar.tmp");
-    fs::write(&temporary, EMBEDDED_ADAPTER)
+    fs::write(&temporary, bytes)
         .with_context(|| format!("failed to write embedded Adapter {}", temporary.display()))?;
     if destination.exists() {
         fs::remove_file(&destination).with_context(|| {

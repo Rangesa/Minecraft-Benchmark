@@ -163,16 +163,16 @@ fn decode_powershell_output(bytes: &[u8]) -> Result<String> {
 
 fn decode_utf16(bytes: &[u8], offset: usize, little_endian: bool) -> Result<String> {
     let mut units = Vec::with_capacity((bytes.len() - offset) / 2);
-    let mut chunks = bytes[offset..].chunks_exact(2);
-    for chunk in &mut chunks {
+    let (chunks, remainder) = bytes[offset..].as_chunks::<2>();
+    for chunk in chunks {
         let unit = if little_endian {
-            u16::from_le_bytes([chunk[0], chunk[1]])
+            u16::from_le_bytes(*chunk)
         } else {
-            u16::from_be_bytes([chunk[0], chunk[1]])
+            u16::from_be_bytes(*chunk)
         };
         units.push(unit);
     }
-    if !chunks.remainder().is_empty() {
+    if !remainder.is_empty() {
         let encoding = if little_endian {
             "UTF-16LE"
         } else {
@@ -189,11 +189,8 @@ fn decode_utf16(bytes: &[u8], offset: usize, little_endian: bool) -> Result<Stri
 }
 
 fn looks_like_utf16(bytes: &[u8], little_endian: bool) -> bool {
-    let pairs: Vec<[u8; 2]> = bytes
-        .chunks_exact(2)
-        .take(128)
-        .map(|chunk| [chunk[0], chunk[1]])
-        .collect();
+    let (pairs, _) = bytes.as_chunks::<2>();
+    let pairs = &pairs[..pairs.len().min(128)];
     if pairs.len() < 2 {
         return false;
     }

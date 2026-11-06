@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "mcbenchmark",
+  "version": "${version}",
+  "name": "MineBench Fabric Adapter",
+  "description": "Automated MineBench adapter for Minecraft 1.21.1 Fabric",
+  "authors": [],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "dev.bench.BenchmarkMod"
+    ]
+  },
+  "mixins": [
+    "mcbench.mixins.json",
+    {
+      "config": "mcbench.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric-api": "*",
+    "minecraft": "${minecraft_version}",
+    "java": ">=21"
+  }
+}

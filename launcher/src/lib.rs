@@ -1,5 +1,6 @@
 pub mod adapter;
 pub mod adapter_embed;
+pub mod catalog;
 pub mod detection;
 pub mod external;
 pub mod hardware;

@@ -53,7 +53,10 @@ pub fn embedded_real_adapter() -> AdapterArtifact {
         kind: "minecraft".to_string(),
         loader_family: EMBEDDED_ADAPTER_LOADER_FAMILY.to_string(),
         minecraft_versions: vec![EMBEDDED_ADAPTER_MINECRAFT_VERSION.to_string()],
-        loader_versions: vec![EMBEDDED_ADAPTER_LOADER_VERSION.to_string()],
+        loader_versions: vec![
+            EMBEDDED_ADAPTER_LOADER_VERSION.to_string(),
+            "0.20.1".to_string(),
+        ],
         file_name: EMBEDDED_ADAPTER_FILE_NAME.to_string(),
         download_url: None,
         sha512: None,
@@ -65,7 +68,15 @@ pub fn resolve_embedded_real_adapter(
     loader: &str,
     loader_version: Option<&str>,
 ) -> Result<AdapterArtifact> {
-    let adapter = embedded_real_adapter();
+    let adapter = embedded_real_adapters()
+        .into_iter()
+        .find(|adapter| {
+            adapter
+                .minecraft_versions
+                .iter()
+                .any(|version| version == minecraft_version)
+        })
+        .with_context(|| format!("no embedded Adapter matches Minecraft {minecraft_version}"))?;
     if !matches_value(&adapter.loader_family, loader)
         || !matches_any(&adapter.minecraft_versions, minecraft_version)
         || (loader_version.is_some_and(|version| !matches_any(&adapter.loader_versions, version)))
@@ -78,6 +89,28 @@ pub fn resolve_embedded_real_adapter(
         );
     }
     Ok(adapter)
+}
+
+pub fn embedded_real_adapters() -> Vec<AdapterArtifact> {
+    crate::catalog::targets()
+        .into_iter()
+        .map(|entry| AdapterArtifact {
+            id: EMBEDDED_ADAPTER_ID.to_string(),
+            version: if entry.minecraft == "1.21.1" {
+                "1.0"
+            } else {
+                "1.1.0"
+            }
+            .to_string(),
+            kind: "minecraft".to_string(),
+            loader_family: "fabric".to_string(),
+            minecraft_versions: vec![entry.minecraft.clone()],
+            loader_versions: vec!["0.19.5".to_string(), "0.20.1".to_string()],
+            file_name: format!("mcbenchmark-fabric-{}.jar", entry.minecraft),
+            download_url: None,
+            sha512: None,
+        })
+        .collect()
 }
 
 impl AdapterManifest {
@@ -150,7 +183,7 @@ impl AdapterManifest {
 }
 
 pub fn development_manifest() -> AdapterManifest {
-    AdapterManifest {
+    let mut manifest = AdapterManifest {
         schema: 1,
         manifest_version: "BUILTIN-MANIFEST-v2".to_string(),
         generated_at: crate::time::now_iso8601(),
@@ -173,7 +206,13 @@ pub fn development_manifest() -> AdapterManifest {
             },
         ],
         signature: None,
-    }
+    };
+    manifest.adapters.extend(
+        embedded_real_adapters()
+            .into_iter()
+            .filter(|adapter| adapter.minecraft_versions != ["1.21.1"]),
+    );
+    manifest
 }
 
 pub fn load_manifest(path: Option<&Path>) -> Result<AdapterManifest> {
@@ -317,6 +356,22 @@ fn matches_value(value: &str, candidate: &str) -> bool {
 mod tests {
     use super::*;
     use crate::detection::{DetectedLoader, InstanceDetection};
+
+    #[test]
+    fn each_supported_game_resolves_only_its_exact_adapter() {
+        for target in crate::catalog::targets() {
+            let artifact =
+                resolve_embedded_real_adapter(&target.minecraft, "fabric", Some("0.20.1")).unwrap();
+            assert_eq!(artifact.minecraft_versions, vec![target.minecraft.clone()]);
+            assert_eq!(
+                artifact.file_name,
+                format!("mcbenchmark-fabric-{}.jar", target.minecraft)
+            );
+        }
+        assert!(resolve_embedded_real_adapter("26.3", "fabric", Some("0.20.1")).is_err());
+        assert!(resolve_embedded_real_adapter("26.2", "forge", Some("0.20.1")).is_err());
+        assert!(resolve_embedded_real_adapter("26.2", "fabric", Some("0.1.0")).is_err());
+    }
 
     fn detection(version: Option<&str>, loader: &str) -> InstanceDetection {
         InstanceDetection {

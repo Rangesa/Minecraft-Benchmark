@@ -3,19 +3,12 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $projectRoot
 
-$adapterJar = Join-Path $projectRoot "build\libs\mcbench-1.0.jar"
-& .\gradlew.bat build --no-daemon
+& python scripts\build_versions.py
 if ($LASTEXITCODE -ne 0) {
     throw "Gradle Adapter build failed with exit code $LASTEXITCODE"
 }
-if (-not (Test-Path -LiteralPath $adapterJar -PathType Leaf)) {
-    throw "Gradle did not produce the Fabric Adapter JAR: $adapterJar"
-}
-
-$env:MINEBENCH_ADAPTER_JAR = $adapterJar
 & cargo build -p minebench-launcher --release
 $cargoExitCode = $LASTEXITCODE
-Remove-Item Env:MINEBENCH_ADAPTER_JAR -ErrorAction SilentlyContinue
 if ($cargoExitCode -ne 0) {
     throw "Rust launcher build failed with exit code $cargoExitCode"
 }

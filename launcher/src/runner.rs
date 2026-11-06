@@ -8,7 +8,9 @@ use crate::instance::{
     PrepareRunRequest, PreparedRun, prepare_run, update_run_manifest, write_json_atomic,
 };
 use crate::protocol::{BenchmarkConfig, CaptureConfig, ResultSummary, StatusFile};
-use crate::runtime::{FabricRuntimeRequest, ensure_fabric_api, inject_mod, prepare_fabric_runtime};
+use crate::runtime::{
+    FabricRuntimeRequest, ensure_fabric_api_for_version, inject_mod, prepare_fabric_runtime,
+};
 use crate::scoring::sha256_bytes;
 use crate::time::now_iso8601;
 use anyhow::{Context, Result, bail};
@@ -166,7 +168,8 @@ fn run_real_after_prepare(
         0.05,
         &format!("Materializing embedded Adapter {}", adapter.id),
     )?;
-    let adapter_path = adapter_embed::materialize(&request.data_dir)?;
+    let adapter_path =
+        adapter_embed::materialize_for_version(&request.data_dir, &request.minecraft_version)?;
 
     write_launcher_status(
         prepared,
@@ -175,7 +178,8 @@ fn run_real_after_prepare(
         0.12,
         "Resolving Fabric API and the official Minecraft runtime",
     )?;
-    let fabric_api_path = ensure_fabric_api(&request.data_dir)?;
+    let fabric_api_path =
+        ensure_fabric_api_for_version(&request.data_dir, &request.minecraft_version)?;
     let runtime = prepare_fabric_runtime(&FabricRuntimeRequest {
         data_dir: request.data_dir.clone(),
         instance_dir: prepared.instance_dir.clone(),

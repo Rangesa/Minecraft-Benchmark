@@ -4,9 +4,9 @@ MineBench is a Windows launcher plus a real Minecraft benchmark Adapter.
 
 ## Current production path
 
-MineBench.exe starts an isolated temporary instance, launches Minecraft 1.21.1 Fabric, creates a fixed-seed world automatically, applies benchmark-owned graphics settings, runs warmup and graphics/simulation/chunk measurements, writes raw telemetry and a summary, exits Minecraft, and displays the local result.
+MineBench.exe starts an isolated temporary instance, launches the selected supported Fabric Minecraft version, creates a fixed-seed world automatically, applies benchmark-owned graphics settings, runs warmup and graphics/simulation/chunk measurements, writes raw telemetry and a summary, exits Minecraft, and displays the local result.
 
-The current Adapter is pinned to Minecraft 1.21.1, Fabric Loader 0.19.5, and Fabric API 0.116.17+1.21.1. The detector recognizes Fabric, Forge, NeoForge, and Quilt metadata; only the Fabric 1.21.1 runtime is enabled in this implementation. Unsupported loader/version combinations fail closed instead of launching the wrong runtime.
+Version-specific Fabric Adapters cover every stable release from 1.21.1 through 26.2. Each runtime has pinned Loader/Fabric API inputs and an exact-version embedded Adapter. The detector recognizes Fabric, Forge, NeoForge, and Quilt metadata; only Fabric has a runtime Adapter. Unsupported loader/version combinations fail closed instead of launching the wrong runtime. See [version builds and validation limits](MINECRAFT_VERSIONS.md); the new versions are build-verified and have not yet completed real-world benchmark validation.
 
 ## Build
 

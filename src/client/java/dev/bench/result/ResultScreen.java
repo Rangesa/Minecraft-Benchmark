@@ -46,20 +46,20 @@ public class ResultScreen extends Screen {
 
         // タイトル
         context.drawCenteredTextWithShadow(textRenderer,
-                Text.literal("§6§lMC Benchmark Result"), cx, y, 0xFFFFFF);
+                Text.literal("§6§lMC Benchmark Result"), cx, y, 0xFFFFFFFF);
         y += 18;
 
         // シナリオ名 / 日時
         context.drawCenteredTextWithShadow(textRenderer,
-                Text.literal("§7Scenario: §f" + result.scenarioName), cx, y, 0xFFFFFF);
+                Text.literal("§7Scenario: §f" + result.scenarioName), cx, y, 0xFFFFFFFF);
         y += 12;
         context.drawCenteredTextWithShadow(textRenderer,
-                Text.literal("§7" + result.timestamp), cx, y, 0xAAAAAA);
+                Text.literal("§7" + result.timestamp), cx, y, 0xFFAAAAAA);
         y += 25;
 
         // ---- FPS セクション ----
         context.drawCenteredTextWithShadow(textRenderer,
-                Text.literal("§b--- Rendering ---"), cx, y, 0xFFFFFF);
+                Text.literal("§b--- Rendering ---"), cx, y, 0xFFFFFFFF);
         y += 14;
 
         drawStat(context, cx, y, "Avg FPS", String.format("§f%.1f fps", result.avgFps));
@@ -75,7 +75,7 @@ public class ResultScreen extends Screen {
 
         // ---- Entity セクション ----
         context.drawCenteredTextWithShadow(textRenderer,
-                Text.literal("§d--- Entity Tick ---"), cx, y, 0xFFFFFF);
+                Text.literal("§d--- Entity Tick ---"), cx, y, 0xFFFFFFFF);
         y += 14;
 
         drawStat(context, cx, y, "Avg Tick Time", String.format("§f%.3f ms", result.avgEntityTickMs));
@@ -85,16 +85,16 @@ public class ResultScreen extends Screen {
 
         // FPS評価コメント
         context.drawCenteredTextWithShadow(textRenderer,
-                Text.literal(getComment(result.avgFps)), cx, y, 0xFFFFFF);
+                Text.literal(getComment(result.avgFps)), cx, y, 0xFFFFFFFF);
 
         super.render(context, mouseX, mouseY, delta);
     }
 
     private void drawStat(DrawContext context, int cx, int y, String label, String value) {
         context.drawTextWithShadow(textRenderer,
-                Text.literal("§7" + label + ":"), cx - 130, y, 0xFFFFFF);
+                Text.literal("§7" + label + ":"), cx - 130, y, 0xFFFFFFFF);
         context.drawTextWithShadow(textRenderer,
-                Text.literal(value), cx + 10, y, 0xFFFFFF);
+                Text.literal(value), cx + 10, y, 0xFFFFFFFF);
     }
 
     private String getComment(double avgFps) {

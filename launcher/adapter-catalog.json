@@ -1,0 +1,122 @@
+[
+  {
+    "minecraft": "1.21.1",
+    "loader_version": "0.19.5",
+    "fabric_api_version": "0.116.17+1.21.1",
+    "fabric_api_sha1": "810b2b0195371a012906241d8b85a32a1d6de53c",
+    "fabric_api_size": 2452735,
+    "minimum_java": 21
+  },
+  {
+    "minecraft": "1.21.2",
+    "loader_version": "0.20.1",
+    "fabric_api_version": "0.106.1+1.21.2",
+    "fabric_api_sha1": "4ad6afcfb5353bf9b8ee84d744963fbe31762a93",
+    "fabric_api_size": 2301393,
+    "minimum_java": 21
+  },
+  {
+    "minecraft": "1.21.3",
+    "loader_version": "0.20.1",
+    "fabric_api_version": "0.114.1+1.21.3",
+    "fabric_api_sha1": "d1ffd05bd3bea0949ada538fa3b1aead57053330",
+    "fabric_api_size": 2380714,
+    "minimum_java": 21
+  },
+  {
+    "minecraft": "1.21.4",
+    "loader_version": "0.20.1",
+    "fabric_api_version": "0.119.4+1.21.4",
+    "fabric_api_sha1": "1c7871b6af04edc8b8f0dbad12606d67f6118a11",
+    "fabric_api_size": 2149128,
+    "minimum_java": 21
+  },
+  {
+    "minecraft": "1.21.5",
+    "loader_version": "0.20.1",
+    "fabric_api_version": "0.128.2+1.21.5",
+    "fabric_api_sha1": "920dea0ac4ff08f539099215eace9fda3e3fb2e3",
+    "fabric_api_size": 2248994,
+    "minimum_java": 21
+  },
+  {
+    "minecraft": "1.21.6",
+    "loader_version": "0.20.1",
+    "fabric_api_version": "0.128.2+1.21.6",
+    "fabric_api_sha1": "b273a883a3864108453a5d5f0b9e4f0a870c9579",
+    "fabric_api_size": 2209737,
+    "minimum_java": 21
+  },
+  {
+    "minecraft": "1.21.7",
+    "loader_version": "0.20.1",
+    "fabric_api_version": "0.129.0+1.21.7",
+    "fabric_api_sha1": "60bb50ad1f7d316be9ba662e84089e1affdd44e6",
+    "fabric_api_size": 2212353,
+    "minimum_java": 21
+  },
+  {
+    "minecraft": "1.21.8",
+    "loader_version": "0.20.1",
+    "fabric_api_version": "0.136.1+1.21.8",
+    "fabric_api_sha1": "56a377bdbf4d83a90d6863ca91b4776f7f09a46b",
+    "fabric_api_size": 2269700,
+    "minimum_java": 21
+  },
+  {
+    "minecraft": "1.21.9",
+    "loader_version": "0.20.1",
+    "fabric_api_version": "0.134.1+1.21.9",
+    "fabric_api_sha1": "c1ccbf0f5d3aca7d86963677da71e700498c3c9b",
+    "fabric_api_size": 2290371,
+    "minimum_java": 21
+  },
+  {
+    "minecraft": "1.21.10",
+    "loader_version": "0.20.1",
+    "fabric_api_version": "0.138.4+1.21.10",
+    "fabric_api_sha1": "0345c20b71007521a25b393091adeb45328d7c57",
+    "fabric_api_size": 2375888,
+    "minimum_java": 21
+  },
+  {
+    "minecraft": "1.21.11",
+    "loader_version": "0.20.1",
+    "fabric_api_version": "0.141.6+1.21.11",
+    "fabric_api_sha1": "c98467cbbaf4d197377266795ae015f4130d65b6",
+    "fabric_api_size": 2426039,
+    "minimum_java": 21
+  },
+  {
+    "minecraft": "26.1",
+    "loader_version": "0.20.1",
+    "fabric_api_version": "0.145.1+26.1",
+    "fabric_api_sha1": "088edb9dfcda202a8bdf4ea77b6a8ced41481734",
+    "fabric_api_size": 2404855,
+    "minimum_java": 25
+  },
+  {
+    "minecraft": "26.1.1",
+    "loader_version": "0.20.1",
+    "fabric_api_version": "0.145.4+26.1.1",
+    "fabric_api_sha1": "bb199e859c384ae1bacfb4107a82ae3d98416609",
+    "fabric_api_size": 2407877,
+    "minimum_java": 25
+  },
+  {
+    "minecraft": "26.1.2",
+    "loader_version": "0.20.1",
+    "fabric_api_version": "0.155.3+26.1.2",
+    "fabric_api_sha1": "16c30dfcceaed1ac3b6ac84cbd348a906dc5093e",
+    "fabric_api_size": 2521340,
+    "minimum_java": 25
+  },
+  {
+    "minecraft": "26.2",
+    "loader_version": "0.20.1",
+    "fabric_api_version": "0.161.0+26.2",
+    "fabric_api_sha1": "332da34ebb72171e603a0c538de17f4c54ea9e29",
+    "fabric_api_size": 2566123,
+    "minimum_java": 25
+  }
+]

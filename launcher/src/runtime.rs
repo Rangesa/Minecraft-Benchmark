@@ -1,4 +1,4 @@
-use crate::adapter::{EMBEDDED_ADAPTER_LOADER_VERSION, EMBEDDED_ADAPTER_MINECRAFT_VERSION};
+use crate::adapter::EMBEDDED_ADAPTER_MINECRAFT_VERSION;
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
 use sha1::{Digest, Sha1};
@@ -13,9 +13,6 @@ const MOJANG_VERSION_MANIFEST: &str =
 const FABRIC_PROFILE_TEMPLATE: &str =
     "https://meta.fabricmc.net/v2/versions/loader/{version}/{loader}/profile/json";
 const FABRIC_MAVEN: &str = "https://maven.fabricmc.net/";
-const FABRIC_API_VERSION: &str = "0.116.17+1.21.1";
-const FABRIC_API_SHA1: &str = "810b2b0195371a012906241d8b85a32a1d6de53c";
-const FABRIC_API_SIZE: u64 = 2_452_735;
 const MAX_DOWNLOAD_BYTES: u64 = 1_024 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
@@ -40,13 +37,10 @@ pub struct RuntimeSpec {
 }
 
 pub fn prepare_fabric_runtime(request: &FabricRuntimeRequest) -> Result<RuntimeSpec> {
-    if request.minecraft_version != EMBEDDED_ADAPTER_MINECRAFT_VERSION {
-        bail!(
-            "the integrated Fabric Adapter currently supports Minecraft {}; got {}",
-            EMBEDDED_ADAPTER_MINECRAFT_VERSION,
-            request.minecraft_version
-        );
-    }
+    let target = crate::catalog::target(&request.minecraft_version)?;
+    let java_path = find_java(target.minimum_java)?;
+    let loader_version =
+        choose_loader_version_for_target(request.loader_version.as_deref(), &target.loader_version);
     if request.username.trim().is_empty() {
         bail!("Minecraft username cannot be empty");
     }
@@ -54,10 +48,9 @@ pub fn prepare_fabric_runtime(request: &FabricRuntimeRequest) -> Result<RuntimeS
     let cache = request.data_dir.join("cache");
     let minecraft_cache = cache.join("minecraft").join(&request.minecraft_version);
     let libraries_dir = cache.join("libraries");
-    let natives_dir = cache.join("natives").join(format!(
-        "{}-{}",
-        request.minecraft_version, EMBEDDED_ADAPTER_LOADER_VERSION
-    ));
+    let natives_dir = cache
+        .join("natives")
+        .join(format!("{}-{}", request.minecraft_version, loader_version));
     fs::create_dir_all(&minecraft_cache).with_context(|| {
         format!(
             "failed to create runtime cache {}",
@@ -96,7 +89,6 @@ pub fn prepare_fabric_runtime(request: &FabricRuntimeRequest) -> Result<RuntimeS
         }
     }
 
-    let loader_version = choose_loader_version(request.loader_version.as_deref());
     let profile_url = FABRIC_PROFILE_TEMPLATE
         .replace("{version}", &request.minecraft_version)
         .replace("{loader}", &loader_version);
@@ -126,7 +118,6 @@ pub fn prepare_fabric_runtime(request: &FabricRuntimeRequest) -> Result<RuntimeS
     classpath.push(client_jar.clone());
 
     let assets = ensure_assets(&version_json, &cache, &request.minecraft_version)?;
-    let java_path = find_java()?;
     let classpath_value = classpath
         .iter()
         .map(|path| path.to_string_lossy().into_owned())
@@ -190,18 +181,24 @@ pub fn prepare_fabric_runtime(request: &FabricRuntimeRequest) -> Result<RuntimeS
 }
 
 pub fn ensure_fabric_api(data_dir: &Path) -> Result<PathBuf> {
+    ensure_fabric_api_for_version(data_dir, EMBEDDED_ADAPTER_MINECRAFT_VERSION)
+}
+
+pub fn ensure_fabric_api_for_version(data_dir: &Path, minecraft_version: &str) -> Result<PathBuf> {
+    let target = crate::catalog::target(minecraft_version)?;
+    let api_version = &target.fabric_api_version;
     let destination = data_dir
         .join("cache")
         .join("mods")
-        .join(format!("fabric-api-{FABRIC_API_VERSION}.jar"));
+        .join(format!("fabric-api-{api_version}.jar"));
     let url = format!(
-        "{FABRIC_MAVEN}net/fabricmc/fabric-api/fabric-api/{FABRIC_API_VERSION}/fabric-api-{FABRIC_API_VERSION}.jar"
+        "{FABRIC_MAVEN}net/fabricmc/fabric-api/fabric-api/{api_version}/fabric-api-{api_version}.jar"
     );
     ensure_download(
         &url,
         &destination,
-        Some(FABRIC_API_SHA1),
-        Some(FABRIC_API_SIZE),
+        Some(&target.fabric_api_sha1),
+        Some(target.fabric_api_size),
         "Fabric API",
     )
 }
@@ -233,13 +230,13 @@ pub fn inject_mod(instance_dir: &Path, source: &Path, filename: &str) -> Result<
     Ok(destination)
 }
 
-fn choose_loader_version(requested: Option<&str>) -> String {
+fn choose_loader_version_for_target(requested: Option<&str>, pinned: &str) -> String {
     if std::env::var("MINEBENCH_ALLOW_UNPINNED_LOADER").is_ok()
         && requested.is_some_and(|value| !value.trim().is_empty())
     {
         return requested.unwrap().trim().to_string();
     }
-    EMBEDDED_ADAPTER_LOADER_VERSION.to_string()
+    pinned.to_string()
 }
 
 fn fetch_minecraft_version(version: &str, cache: &Path) -> Result<Value> {
@@ -661,11 +658,11 @@ fn validate_official_url(url: &str) -> Result<()> {
     Ok(())
 }
 
-fn find_java() -> Result<PathBuf> {
+fn find_java(minimum_major: u32) -> Result<PathBuf> {
     if let Some(path) = std::env::var_os("MINECRAFT_JAVA") {
         let path = PathBuf::from(path);
         if path.is_file() {
-            return validate_java(&path);
+            return validate_java(&path, minimum_major);
         }
         bail!(
             "MINECRAFT_JAVA does not point to a file: {}",
@@ -678,7 +675,7 @@ fn find_java() -> Result<PathBuf> {
                 .join("bin")
                 .join(if cfg!(windows) { "java.exe" } else { "java" });
         if path.is_file()
-            && let Ok(java) = validate_java(&path)
+            && let Ok(java) = validate_java(&path, minimum_major)
         {
             return Ok(java);
         }
@@ -691,16 +688,16 @@ fn find_java() -> Result<PathBuf> {
         for line in String::from_utf8_lossy(&output.stdout).lines() {
             let path = PathBuf::from(line.trim());
             if path.is_file()
-                && let Ok(java) = validate_java(&path)
+                && let Ok(java) = validate_java(&path, minimum_major)
             {
                 return Ok(java);
             }
         }
     }
-    bail!("Java 21+ was not found; set MINECRAFT_JAVA or JAVA_HOME")
+    bail!("Java {minimum_major}+ was not found; set MINECRAFT_JAVA or JAVA_HOME")
 }
 
-fn validate_java(path: &Path) -> Result<PathBuf> {
+fn validate_java(path: &Path, minimum_major: u32) -> Result<PathBuf> {
     let output = Command::new(path)
         .arg("-version")
         .output()
@@ -716,10 +713,10 @@ fn validate_java(path: &Path) -> Result<PathBuf> {
             path.display()
         )
     })?;
-    if major < 21 {
+    if major < minimum_major {
         bail!(
-            "Java 21 or newer is required for Minecraft {}; {} reports Java {}",
-            EMBEDDED_ADAPTER_MINECRAFT_VERSION,
+            "Java {} or newer is required; {} reports Java {}",
+            minimum_major,
             path.display(),
             major
         );

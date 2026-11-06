@@ -5,34 +5,50 @@ use std::path::PathBuf;
 fn main() {
     let manifest_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("manifest dir"));
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("out dir"));
-    let configured = env::var_os("MINEBENCH_ADAPTER_JAR").map(PathBuf::from);
-    let candidates = [
-        configured,
-        Some(manifest_dir.join("..\\build\\libs\\mcbench-1.0.jar")),
-    ];
-    let source = candidates
-        .into_iter()
-        .flatten()
-        .find(|path| path.is_file() && path.extension().is_some_and(|value| value == "jar"));
-    let destination = out_dir.join("embedded_adapter.bin");
-    match source {
-        Some(path) => {
-            fs::copy(&path, &destination).unwrap_or_else(|error| {
-                panic!("failed to embed Fabric Adapter {}: {error}", path.display())
+    let root = manifest_dir.parent().expect("repository root");
+    let catalog_path = manifest_dir.join("adapter-catalog.json");
+    let catalog: Vec<serde_json::Value> =
+        serde_json::from_slice(&fs::read(&catalog_path).expect("adapter catalog"))
+            .expect("valid adapter catalog");
+    let mut table = String::from("static ADAPTERS: &[(&str, &[u8])] = &[\n");
+    for entry in catalog {
+        let version = entry["minecraft"].as_str().expect("Minecraft version");
+        let folder = root.join("build").join("versions").join(version);
+        let jar = fs::read_dir(&folder)
+            .ok()
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|entry| entry.path())
+            .find(|path| {
+                path.extension().is_some_and(|ext| ext == "jar")
+                    && !path.to_string_lossy().contains("-sources")
+                    && !path.to_string_lossy().contains("-dev")
             });
+        let destination = out_dir.join(format!("adapter-{version}.bin"));
+        if let Some(path) = jar {
+            fs::copy(&path, &destination).expect("copy versioned Adapter");
             println!("cargo:rerun-if-changed={}", path.display());
+        } else {
+            if env::var("PROFILE").as_deref() == Ok("release") {
+                panic!(
+                    "missing Adapter for Minecraft {version}; run python scripts/build_versions.py first"
+                );
+            }
+            fs::write(&destination, []).expect("empty debug Adapter");
         }
-        None => {
-            // Keep `cargo check` usable before Gradle has produced the JAR. A
-            // real release will fail at runtime with a precise adapter error;
-            // the release script builds Gradle first and embeds the artifact.
-            fs::write(&destination, []).expect("create empty embedded adapter");
-            println!(
-                "cargo:warning=Fabric Adapter JAR not found; build Gradle before a real release"
-            );
-        }
+        table.push_str(&format!(
+            "({version:?}, include_bytes!({:?})),\n",
+            destination.to_string_lossy()
+        ));
     }
-    println!("cargo:rerun-if-env-changed=MINEBENCH_ADAPTER_JAR");
+    table.push_str("];\n");
+    fs::write(out_dir.join("embedded_adapters.rs"), table).expect("write Adapter table");
+    println!("cargo:rerun-if-changed={}", catalog_path.display());
+    println!(
+        "cargo:rerun-if-changed={}",
+        root.join("build/versions").display()
+    );
     if cfg!(windows) && env::var("PROFILE").as_deref() == Ok("release") {
         println!("cargo:rerun-if-changed=minebench.rc");
         embed_resource::compile("minebench.rc", embed_resource::NONE)
